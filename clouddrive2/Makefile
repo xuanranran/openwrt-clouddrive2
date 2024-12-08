@@ -28,7 +28,7 @@ ifeq ($(ARCH),arm)
 	PKG_ARCH:=armv7
 endif
 
-PKG_MIRROR_HASH:=0f2d602ccc72f3866d19efad6aa3f5a833d3fb97638024926fd6ece6141e8eac
+include $(INCLUDE_DIR)/package.mk
 
 define Package/clouddrive2
   SECTION:=net
