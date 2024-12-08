@@ -34,7 +34,7 @@ define Package/clouddrive2
   SECTION:=net
   CATEGORY:=Network
   DEPENDS:=@(arm||aarch64||x86_64) +fuse-utils +fuse3-utils
-  TITLE:=CloudDrive2
+  TITLE:=cloudDrive2
 endef
 
 define Package/clouddrive2/description
