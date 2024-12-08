@@ -7,7 +7,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=CloudDrive2
-PKG_VERSION:=0.8.5
+PKG_VERSION:=0.8.4
 PKG_RELEASE=1
 
 STRIP:=true
@@ -46,7 +46,6 @@ define Download/clouddrive2
   URL_FILE:=clouddrive-2-linux-$(PKG_ARCH)-$(PKG_VERSION).tgz
   FILE:=clouddrive-2-linux-$(PKG_ARCH)-$(PKG_VERSION).tgz
   HASH:=skip
-  # HASH:=eeefc029918bfc0914b1a9197b10bfa31823a1ac9ac47ece89113ec671fe1aeb
 endef
 
 define Build/Prepare
