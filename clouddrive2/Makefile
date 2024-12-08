@@ -66,5 +66,5 @@ define Package/clouddrive2/install
 	cp -rf $(PKG_BUILD_DIR)/clouddrive-2-linux-$(PKG_ARCH)-$(PKG_VERSION)/wwwroot $(1)/usr/share/clouddrive2/
 endef
 
-$(eval $(call Download,clouddrive2))
-$(eval $(call BuildPackage,clouddrive2))
+$(eval $(call Download,$(PKG_NAME)))
+$(eval $(call BuildPackage,$(PKG_NAME)))
