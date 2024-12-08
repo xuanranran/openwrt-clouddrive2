@@ -57,9 +57,9 @@ jobs:
           - pakcages: clouddrive2
             folder: clouddrive2
             version_line: 10
-            # hash_line: 48
+            hash_line: 48
             version_head: PKG_VERSION:=
-            # hash_head: \  HASH:=
+            hash_head: \  HASH:=
             release_api_command: wget -qO- -t5 -T5 "https://api.github.com/repos/cloud-fs/cloud-fs.github.io/releases/latest" | grep "tag_name" | head -n 1 | awk -F ":" '{print $2}' | sed 's/\"//g;s/,//g;s/ //g' | awk -F 'v' '{print $2}'
             release_download_url: https://codeload.github.com/cloud-fs/cloud-fs.github.io/tar.gz/v
             file_name: 
@@ -110,7 +110,7 @@ jobs:
           is_v=$(echo ${{ matrix.release_download_url }} | awk -F/ '{print $NF}')
           if [ ! -n "${{ matrix.file_name }}" ]; then PKG_HASH=$(sha256sum $is_v$New_PKG_VERSION) && PKG_HASH=${PKG_HASH%% *}; else PKG_HASH=$(sha256sum ${file_name##*/}) && PKG_HASH=${PKG_HASH%% *}; fi;
           cd && cd work/openwrt-clouddrive2/openwrt-clouddrive2/${{ matrix.folder }} 
-          # sed -i "${{ matrix.hash_line }}c ${{ matrix.hash_head }}$PKG_HASH" Makefile
+          sed -i "${{ matrix.hash_line }}c ${{ matrix.hash_head }}$PKG_HASH" Makefile
           echo "已更新${{ matrix.pakcages }}版本到: $New_PKG_VERSION"
           echo "${{ matrix.pakcages }} Hash:$PKG_HASH"
           cd && cd main
