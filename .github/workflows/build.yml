@@ -12,24 +12,41 @@ on:
       - '.github/workflows/compile_clouddrive2_version.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
-    name: Build ${{ matrix.target.name }}
+    name: Build ${{ matrix.target.name }}-${{ matrix.target.arch }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         target:
-          - name: ipk
+          - name: x86_64
+            arch: x86_64
             sdk_url: "https://downloads.immortalwrt.org/releases/24.10.4/targets/x86/64/"
             sdk_tar: "SDK.tar.zst"
             sdk_dir: "SDK"
             package_type: "ipk"
-          - name: apk
-            sdk_url: "https://downloads.immortalwrt.org/snapshots/targets/x86/64/"
-            sdk_tar: "SNAPSDK.tar.zst"
-            sdk_dir: "SNAPSDK"
-            package_type: "apk"
+          - name: rockchip
+            arch: aarch64_generic
+            sdk_url: "https://downloads.immortalwrt.org/releases/24.10.4/targets/rockchip/armv8/"
+            sdk_tar: "SDK.tar.zst"
+            sdk_dir: "SDK"
+            package_type: "ipk"
+          - name: armv7
+            arch: arm_cortex-a7
+            sdk_url: "https://downloads.immortalwrt.org/releases/24.10.4/targets/sunxi/cortexa7/"
+            sdk_tar: "SDK.tar.zst"
+            sdk_dir: "SDK"
+            package_type: "ipk"
+          - name: mipsel
+            arch: mipsel_24kc
+            sdk_url: "https://downloads.immortalwrt.org/releases/24.10.4/targets/ramips/mt7621/"
+            sdk_tar: "SDK.tar.zst"
+            sdk_dir: "SDK"
+            package_type: "ipk"
 
     steps:
       - name: Checkout
@@ -48,14 +65,11 @@ jobs:
           BASE_URL="${{ matrix.target.sdk_url }}"
           echo "Fetching SDK from $BASE_URL"
           
-          # Find the SDK filename dynamically (immortalwrt-sdk-...)
-          # Look for .tar.xz (stable) or .tar.zst (newer/snapshot)
+          # Find the SDK filename dynamically
           SDK_FILE=$(curl -s "$BASE_URL" | grep -oE 'immortalwrt-sdk-[^"]+\.tar\.(xz|zst)' | head -n 1)
           
           if [ -z "$SDK_FILE" ]; then
              echo "Failed to find SDK file in $BASE_URL"
-             
-             # Fallback check regular openwrt naming just in case (though unlikely on immortalwrt site)
              SDK_FILE=$(curl -s "$BASE_URL" | grep -oE 'openwrt-sdk-[^"]+\.tar\.(xz|zst)' | head -n 1)
           fi
           
@@ -79,8 +93,6 @@ jobs:
              tar xJf ${{ matrix.target.sdk_tar }}
           fi
           
-          # Move extracted directory to expected SDK_DIR name
-          # Find the directory starting with immortalwrt-sdk or openwrt-sdk
           EXTRACTED_DIR=$(find . -maxdepth 1 -type d -name "*sdk*" | head -n 1)
           mv "$EXTRACTED_DIR" ${{ matrix.target.sdk_dir }}
 
@@ -100,18 +112,9 @@ jobs:
           cp -rf ./luci-app-clouddrive2/. $SDK_ROOT/package/luci-app-clouddrive2/
 
       - name: Configure and Compile
-        env:
-          TARGET_NAME: ${{ matrix.target.name }}
         run: |
           cd tmp/${{ matrix.target.sdk_dir }}
           make defconfig
-          
-          if [ "$TARGET_NAME" = "apk" ]; then
-            echo "CONFIG_IB=y" >> .config
-            echo "CONFIG_SDK=y" >> .config
-            echo "CONFIG_PACKAGE_apk=y" >> .config
-            make defconfig
-          fi
           
           echo "Compiling clouddrive2..."
           make package/clouddrive2/compile -j$(nproc) || make package/clouddrive2/compile V=s
@@ -124,5 +127,38 @@ jobs:
         with:
           name: openwrt-packages-${{ matrix.target.name }}
           path: |
-             tmp/${{ matrix.target.sdk_dir }}/bin/packages/**/*.${{ matrix.target.package_type }}
+             tmp/${{ matrix.target.sdk_dir }}/bin/packages/**/*clouddrive2*.${{ matrix.target.package_type }}
           if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.repository == 'LovinYarn/openwrt-clouddrive2' && startsWith(github.ref, 'refs/tags/') == false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Get Version
+        id: version
+        run: |
+          VERSION=$(grep '^PKG_VERSION:=' clouddrive2/Makefile | cut -d= -f2)
+          echo "PKG_VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          tag_name: "v${{ steps.version.outputs.PKG_VERSION }}"
+          name: "v${{ steps.version.outputs.PKG_VERSION }}"
+          body: |
+            CloudDrive2 OpenWrt Packages
+            
+            Version: ${{ steps.version.outputs.PKG_VERSION }}
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
