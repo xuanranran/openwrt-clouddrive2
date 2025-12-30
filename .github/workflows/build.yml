@@ -144,7 +144,7 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: openwrt-packages-${{ matrix.target.arch }}-${{ matrix.target.sdk_dir }}
+          name: openwrt-packages-${{ matrix.target.name }}-${{ matrix.target.arch }}
           path: |
              tmp/${{ matrix.target.sdk_dir }}/bin/packages/**/*clouddrive2*.${{ matrix.target.package_type }}
           if-no-files-found: error
