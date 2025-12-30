@@ -1,5 +1,7 @@
 # luci-app-clouddrive2
 
+![GitHub Release](https://img.shields.io/github/v/release/xuanranran/openwrt-clouddrive2)
+
 🗂️ A powerful cloud storage management tool for OpenWrt.
 
 ## How to build
