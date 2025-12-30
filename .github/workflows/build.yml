@@ -41,12 +41,27 @@ jobs:
             sdk_tar: "SDK.tar.zst"
             sdk_dir: "SDK"
             package_type: "ipk"
-          - name: mipsel
-            arch: mipsel_24kc
-            sdk_url: "https://downloads.immortalwrt.org/releases/24.10.4/targets/ramips/mt7621/"
-            sdk_tar: "SDK.tar.zst"
-            sdk_dir: "SDK"
-            package_type: "ipk"
+
+
+          # APK Targets (Snapshots)
+          - name: x86_64-apk
+            arch: x86_64
+            sdk_url: "https://downloads.immortalwrt.org/snapshots/targets/x86/64/"
+            sdk_tar: "SNAPSDK.tar.zst"
+            sdk_dir: "SNAPSDK"
+            package_type: "apk"
+          - name: rockchip-apk
+            arch: aarch64_generic
+            sdk_url: "https://downloads.immortalwrt.org/snapshots/targets/rockchip/armv8/"
+            sdk_tar: "SNAPSDK.tar.zst"
+            sdk_dir: "SNAPSDK"
+            package_type: "apk"
+          - name: armv7-apk
+            arch: arm_cortex-a7
+            sdk_url: "https://downloads.immortalwrt.org/snapshots/targets/sunxi/cortexa7/"
+            sdk_tar: "SNAPSDK.tar.zst"
+            sdk_dir: "SNAPSDK"
+            package_type: "apk"
 
     steps:
       - name: Checkout
@@ -116,6 +131,11 @@ jobs:
           cd tmp/${{ matrix.target.sdk_dir }}
           make defconfig
           
+          if [ "${{ matrix.target.package_type }}" = "apk" ]; then
+             echo "CONFIG_PACKAGE_apk=y" >> .config
+             make defconfig
+          fi
+          
           echo "Compiling clouddrive2..."
           make package/clouddrive2/compile -j$(nproc) || make package/clouddrive2/compile V=s
           
@@ -125,7 +145,7 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: openwrt-packages-${{ matrix.target.name }}
+          name: openwrt-packages-${{ matrix.target.name }}-${{ matrix.target.arch }}
           path: |
              tmp/${{ matrix.target.sdk_dir }}/bin/packages/**/*clouddrive2*.${{ matrix.target.package_type }}
           if-no-files-found: error
