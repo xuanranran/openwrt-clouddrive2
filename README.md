@@ -47,7 +47,7 @@
 
   install via ghproxy:
   ```shell
-  sh -c "$(curl -ksS https://gh.cooluc.com/https://raw.githubusercontent.com/xuanranran/openwrt-clouddrive2/main/install.sh)" _ gh_proxy="https://gh.cooluc.com/"
+  sh -c "$(curl -ksS https://ghproxy.net/https://raw.githubusercontent.com/xuanranran/openwrt-clouddrive2/main/install.sh)" _ gh_proxy="https://ghproxy.net/"
   ```
 
 --------------
