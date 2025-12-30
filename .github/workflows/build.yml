@@ -23,19 +23,19 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - name: x86_64
+          - name: x86_64-openwrt-24.10
             arch: x86_64
             sdk_url: "https://downloads.immortalwrt.org/releases/24.10.4/targets/x86/64/"
             sdk_tar: "SDK.tar.zst"
             sdk_dir: "SDK"
             package_type: "ipk"
-          - name: rockchip
+          - name: rockchip-openwrt-24.10
             arch: aarch64_generic
             sdk_url: "https://downloads.immortalwrt.org/releases/24.10.4/targets/rockchip/armv8/"
             sdk_tar: "SDK.tar.zst"
             sdk_dir: "SDK"
             package_type: "ipk"
-          - name: armv7
+          - name: armv7-openwrt-24.10
             arch: arm_cortex-a7
             sdk_url: "https://downloads.immortalwrt.org/releases/24.10.4/targets/sunxi/cortexa7/"
             sdk_tar: "SDK.tar.zst"
@@ -44,19 +44,19 @@ jobs:
 
 
           # APK Targets (Snapshots)
-          - name: x86_64-apk
+          - name: x86_64-SNAPSHOT
             arch: x86_64
             sdk_url: "https://downloads.immortalwrt.org/snapshots/targets/x86/64/"
             sdk_tar: "SNAPSDK.tar.zst"
             sdk_dir: "SNAPSDK"
             package_type: "apk"
-          - name: rockchip-apk
+          - name: rockchip-SNAPSHOT
             arch: aarch64_generic
             sdk_url: "https://downloads.immortalwrt.org/snapshots/targets/rockchip/armv8/"
             sdk_tar: "SNAPSDK.tar.zst"
             sdk_dir: "SNAPSDK"
             package_type: "apk"
-          - name: armv7-apk
+          - name: armv7-SNAPSHOT
             arch: arm_cortex-a7
             sdk_url: "https://downloads.immortalwrt.org/snapshots/targets/sunxi/cortexa7/"
             sdk_tar: "SNAPSDK.tar.zst"
@@ -129,6 +129,8 @@ jobs:
       - name: Configure and Compile
         run: |
           cd tmp/${{ matrix.target.sdk_dir }}
+          echo "CONFIG_PACKAGE_clouddrive2=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-clouddrive2=y" >> .config
           make defconfig
           
           if [ "${{ matrix.target.package_type }}" = "apk" ]; then
@@ -136,16 +138,13 @@ jobs:
              make defconfig
           fi
           
-          echo "Compiling clouddrive2..."
-          make package/clouddrive2/compile -j$(nproc) || make package/clouddrive2/compile V=s
-          
-          echo "Compiling luci-app-clouddrive2..."
-          make package/luci-app-clouddrive2/compile -j$(nproc) || make package/luci-app-clouddrive2/compile V=s
+          echo "Compiling packages..."
+          make package/compile -j$(nproc) || make package/compile V=s
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: openwrt-packages-${{ matrix.target.name }}-${{ matrix.target.arch }}
+          name: openwrt-packages-${{ matrix.target.arch }}-${{ matrix.target.sdk_dir }}
           path: |
              tmp/${{ matrix.target.sdk_dir }}/bin/packages/**/*clouddrive2*.${{ matrix.target.package_type }}
           if-no-files-found: error
