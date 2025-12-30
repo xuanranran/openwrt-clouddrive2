@@ -129,8 +129,6 @@ jobs:
       - name: Configure and Compile
         run: |
           cd tmp/${{ matrix.target.sdk_dir }}
-          echo "CONFIG_PACKAGE_clouddrive2=y" >> .config
-          echo "CONFIG_PACKAGE_luci-app-clouddrive2=y" >> .config
           make defconfig
           
           if [ "${{ matrix.target.package_type }}" = "apk" ]; then
@@ -138,8 +136,8 @@ jobs:
              make defconfig
           fi
           
-          echo "Compiling packages..."
-          make package/compile -j$(nproc) || make package/compile V=s
+          echo "Compiling luci-app-clouddrive2..."
+          make package/luci-app-clouddrive2/compile -j$(nproc) || make package/luci-app-clouddrive2/compile V=s
 
       - name: Prepare Artifacts
         run: |
