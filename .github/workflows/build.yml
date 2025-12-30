@@ -141,12 +141,17 @@ jobs:
           echo "Compiling packages..."
           make package/compile -j$(nproc) || make package/compile V=s
 
+      - name: Prepare Artifacts
+        run: |
+          tag_name="${{  matrix.target.name }}"
+          mkdir -p "$tag_name"
+          find tmp/${{ matrix.target.sdk_dir }}/bin/packages/ -name "*clouddrive2*.${{ matrix.target.package_type }}" -exec cp {} "$tag_name"/ \;
+
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: openwrt-packages-${{ matrix.target.name }}
-          path: |
-             tmp/${{ matrix.target.sdk_dir }}/bin/packages/**/*clouddrive2*.${{ matrix.target.package_type }}
+          name: ${{ matrix.target.name }}
+          path: ${{ matrix.target.name }}/*
           if-no-files-found: error
 
   release:
