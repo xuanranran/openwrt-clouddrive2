@@ -42,12 +42,12 @@
 
 - Execute install script (Multi-architecture support)
   ```shell
-  sh -c "$(curl -ksS https://raw.githubusercontent.com/xuanranran/openwrt-clouddrive2/main/install.sh)"
+  sh -c "$(curl -ksS https://raw.githubusercontent.com/xuanranran/openwrt-clouddrive2/master/install.sh)"
   ```
 
   install via ghproxy:
   ```shell
-  sh -c "$(curl -ksS https://ghproxy.net/https://raw.githubusercontent.com/xuanranran/openwrt-clouddrive2/main/install.sh)" _ gh_proxy="https://ghproxy.net/"
+  sh -c "$(curl -ksS https://ghproxy.net/https://raw.githubusercontent.com/xuanranran/openwrt-clouddrive2/master/install.sh)" _ gh_proxy="https://ghproxy.net/"
   ```
 
 --------------
