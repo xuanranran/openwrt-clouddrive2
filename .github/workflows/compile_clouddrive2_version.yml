@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   check-and-update:
@@ -75,3 +76,9 @@ jobs:
           # Commit and Push
           git commit -m "clouddrive2: update to ${{ steps.check.outputs.new_version }}"
           git push origin HEAD:${{ github.ref }}
+
+      - name: Trigger Build
+        if: steps.check.outputs.update_needed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run build.yml
