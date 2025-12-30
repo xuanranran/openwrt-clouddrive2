@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   build:
-    name: Build ${{ matrix.target.name }}-${{ matrix.target.arch }}
+    name: Build ${{ matrix.target.name }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
