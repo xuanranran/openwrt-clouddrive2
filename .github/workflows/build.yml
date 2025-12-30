@@ -1,0 +1,128 @@
+name: Build OpenWrt Package
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths-ignore:
+      - '.github/workflows/compile_clouddrive2_version.yml'
+  pull_request:
+    paths-ignore:
+      - '.github/workflows/compile_clouddrive2_version.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ${{ matrix.target.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - name: ipk
+            sdk_url: "https://downloads.immortalwrt.org/releases/24.10.4/targets/x86/64/"
+            sdk_tar: "SDK.tar.zst"
+            sdk_dir: "SDK"
+            package_type: "ipk"
+          - name: apk
+            sdk_url: "https://downloads.immortalwrt.org/snapshots/targets/x86/64/"
+            sdk_tar: "SNAPSDK.tar.zst"
+            sdk_dir: "SNAPSDK"
+            package_type: "apk"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install curl git tar zstd python3 python3-pyelftools python3-setuptools aria2
+
+      - name: Download SDK
+        run: |
+          mkdir -p tmp
+          BASE_URL="${{ matrix.target.sdk_url }}"
+          echo "Fetching SDK from $BASE_URL"
+          
+          # Find the SDK filename dynamically (immortalwrt-sdk-...)
+          # Look for .tar.xz (stable) or .tar.zst (newer/snapshot)
+          SDK_FILE=$(curl -s "$BASE_URL" | grep -oE 'immortalwrt-sdk-[^"]+\.tar\.(xz|zst)' | head -n 1)
+          
+          if [ -z "$SDK_FILE" ]; then
+             echo "Failed to find SDK file in $BASE_URL"
+             
+             # Fallback check regular openwrt naming just in case (though unlikely on immortalwrt site)
+             SDK_FILE=$(curl -s "$BASE_URL" | grep -oE 'openwrt-sdk-[^"]+\.tar\.(xz|zst)' | head -n 1)
+          fi
+          
+          if [ -z "$SDK_FILE" ]; then
+             echo "Could not detect SDK filename."
+             exit 1
+          fi
+
+          echo "Detected SDK File: $SDK_FILE"
+          
+          if ! curl -SLk --connect-timeout 30 --retry 2 "$BASE_URL/$SDK_FILE" -o "./tmp/${{ matrix.target.sdk_tar }}"; then
+              echo "Failed to download SDK"
+              exit 1
+          fi
+            
+          cd tmp
+          if [[ "${{ matrix.target.sdk_tar }}" == *.tar.zst ]]; then
+             zstd -d ${{ matrix.target.sdk_tar }}
+             tar xf $(basename ${{ matrix.target.sdk_tar }} .zst)
+          else
+             tar xJf ${{ matrix.target.sdk_tar }}
+          fi
+          
+          # Move extracted directory to expected SDK_DIR name
+          # Find the directory starting with immortalwrt-sdk or openwrt-sdk
+          EXTRACTED_DIR=$(find . -maxdepth 1 -type d -name "*sdk*" | head -n 1)
+          mv "$EXTRACTED_DIR" ${{ matrix.target.sdk_dir }}
+
+      - name: Prepare Feeds
+        run: |
+          cd tmp/${{ matrix.target.sdk_dir }}
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Copy Source Code
+        run: |
+          SDK_ROOT="tmp/${{ matrix.target.sdk_dir }}"
+          mkdir -p $SDK_ROOT/package/clouddrive2
+          mkdir -p $SDK_ROOT/package/luci-app-clouddrive2
+          
+          cp -rf ./clouddrive2/. $SDK_ROOT/package/clouddrive2/
+          cp -rf ./luci-app-clouddrive2/. $SDK_ROOT/package/luci-app-clouddrive2/
+
+      - name: Configure and Compile
+        env:
+          TARGET_NAME: ${{ matrix.target.name }}
+        run: |
+          cd tmp/${{ matrix.target.sdk_dir }}
+          make defconfig
+          
+          if [ "$TARGET_NAME" = "apk" ]; then
+            echo "CONFIG_IB=y" >> .config
+            echo "CONFIG_SDK=y" >> .config
+            echo "CONFIG_PACKAGE_apk=y" >> .config
+            make defconfig
+          fi
+          
+          echo "Compiling clouddrive2..."
+          make package/clouddrive2/compile -j$(nproc) || make package/clouddrive2/compile V=s
+          
+          echo "Compiling luci-app-clouddrive2..."
+          make package/luci-app-clouddrive2/compile -j$(nproc) || make package/luci-app-clouddrive2/compile V=s
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-packages-${{ matrix.target.name }}
+          path: |
+             tmp/${{ matrix.target.sdk_dir }}/bin/packages/**/*.${{ matrix.target.package_type }}
+          if-no-files-found: error

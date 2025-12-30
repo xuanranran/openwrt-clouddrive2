@@ -1,130 +1,77 @@
-#
-# Description: Auto update package
-#
 name: "Compile The New Clouddrive2 version"
 
 on:
-  push:
-    paths:
-      - '.github/workflows/compile_clouddrive2_version.yml'
   schedule:
     - cron: "0 */12 * * *"
   workflow_dispatch:
-    inputs:
-      packages:
-        description: 'packages'
-        required: false
-        default: 'false'
-    
-env:
-  TZ: Asia/Shanghai
+
+permissions:
+  contents: write
 
 jobs:
-  job_init:
-    runs-on: ubuntu-24.04
+  check-and-update:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@main
+        uses: actions/checkout@v4
         with:
-          ref: 'master'
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Initialization environment
-        run: |
-          sudo timedatectl set-timezone "$TZ"
-
-      - name: Delete workflow runs
-        uses: Mattraks/delete-workflow-runs@main
-        with:
-          token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          retain_days: 1
-          keep_minimum_runs: 0
-        
-      - name: SSH connection to Actions
-        uses: mxschmitt/action-tmate@master
-        if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
-
-  job_auto_update_main:
-    if: ${{ always() }}
-    needs: job_init
-    runs-on: ubuntu-24.04
-    name: Auto-update-${{ matrix.pakcages }} 
-    strategy:
-      fail-fast: false
-      matrix:
-        pakcages: [clouddrive2]
-        include:
-          - pakcages: clouddrive2
-            folder: clouddrive2
-            version_line: 10
-            hash_line: 48
-            version_head: PKG_VERSION:=
-            hash_head: \  HASH:=
-            release_api_command: wget -qO- -t5 -T5 "https://api.github.com/repos/cloud-fs/cloud-fs.github.io/releases/latest" | grep "tag_name" | head -n 1 | awk -F ":" '{print $2}' | sed 's/\"//g;s/,//g;s/ //g' | awk -F 'v' '{print $2}'
-            release_download_url: https://codeload.github.com/cloud-fs/cloud-fs.github.io/tar.gz/v
-            file_name: 
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@main
-        with:
-          ref: 'master'
-
-      - name: Initialization environment
-        run: |
-          cd && mkdir -p main && cd main
-          sudo timedatectl set-timezone "$TZ"
-
-      - name: Check ${{ matrix.pakcages }}
+      - name: Check for Updates
         id: check
         run: |
-          is_continue=true
-
-          if [ "$is_continue" = "true" ]; then
-            cd && cd work/openwrt-clouddrive2/openwrt-clouddrive2/${{ matrix.folder }} 
-            Old_PKG_VERSION=$(sed -n '${{ matrix.version_line }}p' Makefile | awk -F '=' '{print $2}')
-            New_PKG_VERSION=$(${{ matrix.release_api_command }})
-            echo "${{ matrix.pakcages }}目前版本: $Old_PKG_VERSION"
-            echo "${{ matrix.pakcages }}最新版本: $New_PKG_VERSION"
-            if [ "$Old_PKG_VERSION" = "$New_PKG_VERSION" ]; then 
-              echo "status=failure" >> $GITHUB_OUTPUT; 
-              echo "${{ matrix.pakcages }}版本为最新版本$New_PKG_VERSION,无需更新"; 
-            else 
-              echo "New_PKG_VERSION=$New_PKG_VERSION" >> $GITHUB_OUTPUT;  
-              echo "status=success" >> $GITHUB_OUTPUT;
-            fi
+          # Upstream Repo (Release source)
+          API_URL="https://api.github.com/repos/cloud-fs/cloud-fs.github.io/releases/latest"
+          
+          # Get latest version tag (e.g., v0.9.20)
+          LATEST_TAG=$(curl -s "$API_URL" | grep '"tag_name":' | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
+          
+          if [ -z "$LATEST_TAG" ]; then
+            echo "Failed to find latest release tag."
+            exit 1
+          fi
+          
+          # Clean version string (remove 'v' prefix if present for comparison, but keep original if needed)
+          NEW_VERSION=$(echo "$LATEST_TAG" | sed 's/^v//')
+          
+          echo "Latest Version: $NEW_VERSION"
+          
+          # Get current PKG_VERSION from Makefile
+          CURRENT_VERSION=$(grep '^PKG_VERSION:=' clouddrive2/Makefile | cut -d= -f2)
+          
+          echo "Current Version: $CURRENT_VERSION"
+          
+          if [ "$NEW_VERSION" != "$CURRENT_VERSION" ]; then
+             echo "Update found!"
+             echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+             echo "update_needed=true" >> $GITHUB_OUTPUT
           else
-            echo "status=failure" >> $GITHUB_OUTPUT;
+             echo "No update needed."
+             echo "update_needed=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Update ${{ matrix.pakcages }}
-        id: update
-        if: steps.check.outputs.status == 'success' && steps.check.outputs.New_PKG_VERSION != '' && !cancelled()
+      - name: Update Makefile
+        if: steps.check.outputs.update_needed == 'true'
         run: |
-          cd && cd work/openwrt-clouddrive2/openwrt-clouddrive2/${{ matrix.folder }}
-          New_PKG_VERSION=${{ steps.check.outputs.New_PKG_VERSION }}
-          sed -i "${{ matrix.version_line }}c ${{ matrix.version_head }}$New_PKG_VERSION" Makefile
-          cd && cd main && mkdir -p ${{ matrix.pakcages }} && cd ${{ matrix.pakcages }}
-          wget -P / ${{ matrix.release_download_url }}$New_PKG_VERSION${{ matrix.file_name }}
-          file_name=${{ matrix.file_name }}
-          is_v=$(echo ${{ matrix.release_download_url }} | awk -F/ '{print $NF}')
-          if [ ! -n "${{ matrix.file_name }}" ]; then PKG_HASH=$(sha256sum $is_v$New_PKG_VERSION) && PKG_HASH=${PKG_HASH%% *}; else PKG_HASH=$(sha256sum ${file_name##*/}) && PKG_HASH=${PKG_HASH%% *}; fi;
-          cd && cd work/openwrt-clouddrive2/openwrt-clouddrive2/${{ matrix.folder }} 
-          # sed -i "${{ matrix.hash_line }}c ${{ matrix.hash_head }}$PKG_HASH" Makefile
-          echo "已更新${{ matrix.pakcages }}版本到: $New_PKG_VERSION"
-          echo "${{ matrix.pakcages }} Hash:$PKG_HASH"
-          cd && cd main
-          echo ":white_check_mark: ${{ matrix.pakcages }}: update to $New_PKG_VERSION" >> commit_messages.txt
-          echo "version=$New_PKG_VERSION" >> $GITHUB_OUTPUT
+          NEW_VER="${{ steps.check.outputs.new_version }}"
+          
+          echo "Updating Makefile to $NEW_VER..."
+          
+          # Update PKG_VERSION
+          sed -i "s/^PKG_VERSION:=.*/PKG_VERSION:=$NEW_VER/" clouddrive2/Makefile
+          
+          # Reset PKG_RELEASE to 1
+          sed -i "s/^PKG_RELEASE:=.*/PKG_RELEASE:=1/" clouddrive2/Makefile
 
-          cd && cd work/openwrt-clouddrive2/openwrt-clouddrive2
-          echo "branch_exists=$(git ls-remote --heads origin ${{ matrix.pakcages }}-$New_PKG_VERSION | tr -d '\n')" >> $GITHUB_OUTPUT
-
-      - name: Git Auto Commit
-        uses: stefanzweifel/git-auto-commit-action@master
-        id: commit
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          commit_message: "${{ matrix.pakcages }}: update to ${{ steps.update.outputs.version }}"
-          branch: master
+      - name: Commit and Push
+        if: steps.check.outputs.update_needed == 'true'
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          
+          # Add potentially modified files
+          git add clouddrive2/Makefile
+          
+          # Commit and Push
+          git commit -m "clouddrive2: update to ${{ steps.check.outputs.new_version }}"
+          git push origin HEAD:${{ github.ref }}
