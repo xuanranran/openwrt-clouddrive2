@@ -5,11 +5,13 @@ on:
     branches:
       - main
       - master
-    paths-ignore:
-      - '.github/workflows/compile_clouddrive2_version.yml'
+    paths:
+      - 'clouddrive2/**'
+      - 'luci-app-clouddrive2/**'
   pull_request:
-    paths-ignore:
-      - '.github/workflows/compile_clouddrive2_version.yml'
+    paths:
+      - 'clouddrive2/**'
+      - 'luci-app-clouddrive2/**'
   workflow_dispatch:
 
 permissions:
