@@ -114,5 +114,22 @@ jobs:
             CloudDrive2 OpenWrt Packages
             
             Version: ${{ steps.version.outputs.PKG_VERSION }}
+
+            ### 注意事项 / Prerequisites
+            
+            请在安装本插件前，确保先安装 `fuse-utils` 和 `ca-bundle` 等依赖环境。
+            Please install dependencies before installing this plugin.
+            
+            #### OPKG (OpenWrt 22.03 ~ 24.10.x / ImmortalWrt 22.03 ~ 24.10.x)
+            ```bash
+            opkg update
+            opkg install fuse-utils ca-bundle curl tar
+            ```
+
+            #### APK (OpenWrt 25.12.x ~ Snapshot / ImmortalWrt 25.12.x ~ Snapshot)
+            ```bash
+            apk update
+            apk add fuse-utils ca-bundle curl tar
+            ```
           files: bin/artifacts/*.tar.gz
           token: ${{ secrets.GITHUB_TOKEN }}

@@ -134,6 +134,57 @@ check_requirements() {
     print_info "系统环境检查通过"
 }
 
+# 检查依赖环境
+check_dependencies() {
+    print_info "检查依赖环境..."
+    local deps="fuse-utils ca-bundle"
+    local missing_deps=""
+    
+    for dep in $deps; do
+        if [ "$PKG_MANAGER" = "apk" ]; then
+             if ! apk info -e "$dep" >/dev/null 2>&1; then
+                 missing_deps="$missing_deps $dep"
+             fi
+        else
+             if ! opkg list-installed | grep -q "^$dep "; then
+                 missing_deps="$missing_deps $dep"
+             fi
+        fi
+    done
+    
+    if [ -n "$missing_deps" ]; then
+        print_warn "缺少的依赖:$missing_deps"
+        print_info "尝试自动安装依赖..."
+        
+        if [ "$PKG_MANAGER" = "apk" ]; then
+            apk update
+            apk add $missing_deps
+        else
+            opkg update
+            opkg install $missing_deps
+        fi
+        
+        # Double check
+        for dep in $deps; do
+             if [ "$PKG_MANAGER" = "apk" ]; then
+                 if ! apk info -e "$dep" >/dev/null 2>&1; then
+                     print_error "依赖安装失败: $dep"
+                     print_error "请手动安装: apk add $dep"
+                     exit 1
+                 fi
+            else
+                 if ! opkg list-installed | grep -q "^$dep "; then
+                     print_error "依赖安装失败: $dep"
+                     print_error "请手动安装: opkg install $dep"
+                     exit 1
+                 fi
+            fi
+        done
+        print_info "依赖安装成功"
+    else
+        print_info "所有依赖已安装"
+    fi
+
 # 检查是否已安装
 check_installed() {
     print_info "检查安装状态..."
@@ -361,6 +412,7 @@ main() {
     
     select_github_mirror
     check_requirements
+    check_dependencies
     check_installed
     
     local arch=$(get_cpu_arch)

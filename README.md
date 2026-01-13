@@ -31,15 +31,15 @@
 
 - Login OpenWrt terminal (SSH)
 
-- Install `curl` package
+- Install Dependencies / 安装依赖
   ```shell
   # for opkg package manager (openwrt 21.02 ~ 24.10)
   opkg update
-  opkg install curl ca-bundle
+  opkg install fuse-utils ca-bundle curl tar
   
   # for apk package manager
   apk update
-  apk add curl ca-bundle
+  apk add fuse-utils ca-bundle curl tar
   ```
 
 - Execute install script (Multi-architecture support)
