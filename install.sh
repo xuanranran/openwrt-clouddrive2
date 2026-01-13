@@ -184,6 +184,7 @@ check_dependencies() {
     else
         print_info "所有依赖已安装"
     fi
+}
 
 # 检查是否已安装
 check_installed() {
