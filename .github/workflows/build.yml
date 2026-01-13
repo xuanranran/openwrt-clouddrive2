@@ -8,6 +8,7 @@ on:
     paths:
       - 'clouddrive2/**'
       - 'luci-app-clouddrive2/**'
+      - '.github/workflows/build.yml'
   pull_request:
     paths:
       - 'clouddrive2/**'
@@ -19,155 +20,83 @@ permissions:
 
 jobs:
   build:
-    name: Build ${{ matrix.target.name }}
+    name: Package ${{ matrix.arch }}-${{ matrix.sdk }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        target:
-          - name: x86_64-openwrt-24.10
-            arch: x86_64
-            sdk_url: "https://downloads.immortalwrt.org/releases/24.10.4/targets/x86/64/"
-            sdk_tar: "SDK.tar.zst"
-            sdk_dir: "SDK"
-            package_type: "ipk"
-          - name: rockchip-openwrt-24.10
-            arch: aarch64_generic
-            sdk_url: "https://downloads.immortalwrt.org/releases/24.10.4/targets/rockchip/armv8/"
-            sdk_tar: "SDK.tar.zst"
-            sdk_dir: "SDK"
-            package_type: "ipk"
-          - name: armv7-openwrt-24.10
-            arch: arm_cortex-a7
-            sdk_url: "https://downloads.immortalwrt.org/releases/24.10.4/targets/sunxi/cortexa7/"
-            sdk_tar: "SDK.tar.zst"
-            sdk_dir: "SDK"
-            package_type: "ipk"
+        arch:
+          - x86_64
+          - aarch64_generic
+          - arm_cortex-a7
 
-
-          # APK Targets (Snapshots)
-          - name: x86_64-SNAPSHOT
-            arch: x86_64
-            sdk_url: "https://downloads.immortalwrt.org/snapshots/targets/x86/64/"
-            sdk_tar: "SNAPSDK.tar.zst"
-            sdk_dir: "SNAPSDK"
-            package_type: "apk"
-          - name: rockchip-SNAPSHOT
-            arch: aarch64_generic
-            sdk_url: "https://downloads.immortalwrt.org/snapshots/targets/rockchip/armv8/"
-            sdk_tar: "SNAPSDK.tar.zst"
-            sdk_dir: "SNAPSDK"
-            package_type: "apk"
-          - name: armv7-SNAPSHOT
-            arch: arm_cortex-a7
-            sdk_url: "https://downloads.immortalwrt.org/snapshots/targets/sunxi/cortexa7/"
-            sdk_tar: "SNAPSDK.tar.zst"
-            sdk_dir: "SNAPSDK"
-            package_type: "apk"
+        sdk:
+          - "24.10.4" # For IPK
+          - "SNAPSHOT" # For APK
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Dependencies
+      - name: Build
+        uses: openwrt/gh-action-sdk@v9
         env:
-          DEBIAN_FRONTEND: noninteractive
-        run: |
-          sudo apt-get update
-          sudo apt-get -y install curl git tar zstd python3 python3-pyelftools python3-setuptools aria2
-
-      - name: Download SDK
-        run: |
-          mkdir -p tmp
-          BASE_URL="${{ matrix.target.sdk_url }}"
-          echo "Fetching SDK from $BASE_URL"
-          
-          # Find the SDK filename dynamically
-          SDK_FILE=$(curl -s "$BASE_URL" | grep -oE 'immortalwrt-sdk-[^"]+\.tar\.(xz|zst)' | head -n 1)
-          
-          if [ -z "$SDK_FILE" ]; then
-             echo "Failed to find SDK file in $BASE_URL"
-             SDK_FILE=$(curl -s "$BASE_URL" | grep -oE 'openwrt-sdk-[^"]+\.tar\.(xz|zst)' | head -n 1)
-          fi
-          
-          if [ -z "$SDK_FILE" ]; then
-             echo "Could not detect SDK filename."
-             exit 1
-          fi
-
-          echo "Detected SDK File: $SDK_FILE"
-          
-          if ! curl -SLk --connect-timeout 30 --retry 2 "$BASE_URL/$SDK_FILE" -o "./tmp/${{ matrix.target.sdk_tar }}"; then
-              echo "Failed to download SDK"
-              exit 1
-          fi
-            
-          cd tmp
-          if [[ "${{ matrix.target.sdk_tar }}" == *.tar.zst ]]; then
-             zstd -d ${{ matrix.target.sdk_tar }}
-             tar xf $(basename ${{ matrix.target.sdk_tar }} .zst)
-          else
-             tar xJf ${{ matrix.target.sdk_tar }}
-          fi
-          
-          EXTRACTED_DIR=$(find . -maxdepth 1 -type d -name "*sdk*" | head -n 1)
-          mv "$EXTRACTED_DIR" ${{ matrix.target.sdk_dir }}
-
-      - name: Prepare Feeds
-        run: |
-          cd tmp/${{ matrix.target.sdk_dir }}
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
-
-      - name: Copy Source Code
-        run: |
-          SDK_ROOT="tmp/${{ matrix.target.sdk_dir }}"
-          mkdir -p $SDK_ROOT/package/clouddrive2
-          mkdir -p $SDK_ROOT/package/luci-app-clouddrive2
-          
-          cp -rf ./clouddrive2/. $SDK_ROOT/package/clouddrive2/
-          cp -rf ./luci-app-clouddrive2/. $SDK_ROOT/package/luci-app-clouddrive2/
-
-      - name: Configure and Compile
-        run: |
-          cd tmp/${{ matrix.target.sdk_dir }}
-          make defconfig
-          
-          if [ "${{ matrix.target.package_type }}" = "apk" ]; then
-             echo "CONFIG_PACKAGE_apk=y" >> .config
-             make defconfig
-          fi
-          
-          echo "Compiling luci-app-clouddrive2..."
-          make package/luci-app-clouddrive2/compile -j$(nproc) || make package/luci-app-clouddrive2/compile V=s
+          ARCH: ${{ matrix.arch }}-${{ matrix.sdk }}
+          NO_SHFMT_CHECK: true
+          PACKAGES: clouddrive2 luci-app-clouddrive2
+          V: sc
 
       - name: Prepare Artifacts
         run: |
-          tag_name="${{  matrix.target.name }}"
-          mkdir -p "$tag_name"
-          find tmp/${{ matrix.target.sdk_dir }}/bin/packages/ -name "*clouddrive2*.${{ matrix.target.package_type }}" -exec cp {} "$tag_name"/ \;
-          tar -czvf "$tag_name.tar.gz" -C "$tag_name" .
-          rm -rf "$tag_name"
+          mkdir -p bin/artifacts
+          
+          echo "Finding packages..."
+          # Use find to locate packages, handling potential path variations
+          find bin/packages/ -type f -name "*.ipk" -exec cp {} bin/artifacts/ \; 2>/dev/null || true
+          find bin/packages/ -type f -name "*.apk" -exec cp {} bin/artifacts/ \; 2>/dev/null || true
+          
+          # Rename apk files if needed (append arch)
+          cd bin/artifacts
+          if ls *.apk 1> /dev/null 2>&1; then
+            for apk_file in *.apk; do
+              filename=$(basename "$apk_file")
+              # Skip already renamed or luci files (luci files are usually 'all' arch)
+              if [[ "$filename" == luci-* ]] || [[ "$filename" == *_${{ matrix.arch }}.apk ]]; then
+                 continue
+              fi
+              
+              # Append arch to filename
+              new_filename="${filename%.apk}_${{ matrix.arch }}.apk"
+              mv "$apk_file" "$new_filename"
+            done
+          fi
+          
+          # Check if we have any files to compress
+          if [ -z "$(ls -A .)" ]; then
+             echo "::error::No packages found in bin/packages/! Listing bin directory for debug:"
+             cd ../..
+             ls -R bin/
+             exit 1
+          fi
+
+          # Create tar.gz archive
+          TAR_NAME="clouddrive2-${{ matrix.arch }}-${{ matrix.sdk }}.tar.gz"
+          tar -czvf "$TAR_NAME" *
+          
+          # Clean up
+          mkdir -p ../../upload
+          mv "$TAR_NAME" ../../upload/
+          cd ../..
+          rm -rf bin/artifacts
+          mkdir -p bin/artifacts
+          mv upload/* bin/artifacts/
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.target.name }}
-          path: ${{ matrix.target.name }}.tar.gz
-          if-no-files-found: error
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.repository == 'xuanranran/openwrt-clouddrive2' && startsWith(github.ref, 'refs/tags/') == false
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
+          name: package-${{ matrix.arch }}-${{ matrix.sdk }}
+          path: bin/artifacts/*
+          if-no-files-found: ignore
 
       - name: Get Version
         id: version
@@ -175,16 +104,15 @@ jobs:
           VERSION=$(grep '^PKG_VERSION:=' clouddrive2/Makefile | cut -d= -f2)
           echo "PKG_VERSION=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Create Release
+      - name: Upload to Release
         uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') == false && github.event_name == 'push'
         with:
-          files: artifacts/**/*
           tag_name: "v${{ steps.version.outputs.PKG_VERSION }}"
           name: "v${{ steps.version.outputs.PKG_VERSION }}"
           body: |
             CloudDrive2 OpenWrt Packages
             
             Version: ${{ steps.version.outputs.PKG_VERSION }}
-          draft: false
-          prerelease: false
+          files: bin/artifacts/*.tar.gz
           token: ${{ secrets.GITHUB_TOKEN }}
