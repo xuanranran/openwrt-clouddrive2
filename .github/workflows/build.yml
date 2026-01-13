@@ -52,8 +52,8 @@ jobs:
           
           echo "Finding packages..."
           # Use find to locate packages, handling potential path variations
-          find bin/packages/ -type f -name "*.ipk" -exec cp {} bin/artifacts/ \; 2>/dev/null || true
-          find bin/packages/ -type f -name "*.apk" -exec cp {} bin/artifacts/ \; 2>/dev/null || true
+          find bin/packages/ -type f -name "*clouddrive2*.ipk" -exec cp {} bin/artifacts/ \; 2>/dev/null || true
+          find bin/packages/ -type f -name "*clouddrive2*.apk" -exec cp {} bin/artifacts/ \; 2>/dev/null || true
           
           # Rename apk files if needed (append arch)
           cd bin/artifacts
