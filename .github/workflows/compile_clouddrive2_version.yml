@@ -65,9 +65,9 @@ jobs:
           HASH_AARCH64=$(get_hash "aarch64")
           HASH_ARMV7=$(get_hash "armv7")
           
-          echo "hash_x86_64=$HASH_X86_64" >> $GITHUB_OUTPUT
-          echo "hash_aarch64=$HASH_AARCH64" >> $GITHUB_OUTPUT
-          echo "hash_armv7=$HASH_ARMV7" >> $GITHUB_OUTPUT
+          echo "hash_x86_64=${HASH_X86_64}" >> $GITHUB_OUTPUT
+          echo "hash_aarch64=${HASH_AARCH64}" >> $GITHUB_OUTPUT
+          echo "hash_armv7=${HASH_ARMV7}" >> $GITHUB_OUTPUT
 
       - name: Update Makefile
         if: steps.check.outputs.update_needed == 'true'
