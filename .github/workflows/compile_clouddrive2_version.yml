@@ -93,54 +93,36 @@ jobs:
           HASH_AARCH64: ${{ steps.hashes.outputs.hash_aarch64 }}
           HASH_ARMV7: ${{ steps.hashes.outputs.hash_armv7 }}
         run: |
-          python3 -c "
-          import os
-          import re
-
-          makefile_path = 'clouddrive2/Makefile'
-          new_ver = os.environ['NEW_VER']
-          hash_x86 = os.environ['HASH_X86_64']
-          hash_arm64 = os.environ['HASH_AARCH64']
-          hash_arm7 = os.environ['HASH_ARMV7']
-
-          with open(makefile_path, 'r') as f:
-              content = f.read()
-
-          # Update Version
-          content = re.sub(r'^PKG_VERSION:=.*', f'PKG_VERSION:={new_ver}', content, flags=re.MULTILINE)
-          content = re.sub(r'^PKG_RELEASE:=.*', 'PKG_RELEASE:=1', content, flags=re.MULTILINE)
-
-          # Update Hashes - handling the ifeq blocks
-          # x86_64
-          content = re.sub(
-              r'(ifeq \(\$\(ARCH\),x86_64\).*?PKG_HASH:=)[a-fA-F0-9]+',
-              f'\\g<1>{hash_x86}',
-              content,
-              flags=re.DOTALL
-          )
+          MAKEFILE="clouddrive2/Makefile"
           
-          # aarch64
-          content = re.sub(
-              r'(ifeq \(\$\(ARCH\),aarch64\).*?PKG_HASH:=)[a-fA-F0-9]+',
-              f'\\g<1>{hash_arm64}',
-              content,
-              flags=re.DOTALL
-          )
+          echo "Updating Makefile..."
+          echo "Version: $NEW_VER"
+          echo "x86_64 hash: $HASH_X86_64"
+          echo "aarch64 hash: $HASH_AARCH64"
+          echo "armv7 hash: $HASH_ARMV7"
           
-          # arm (armv7)
-          content = re.sub(
-              r'(ifeq \(\$\(ARCH\),arm\).*?PKG_HASH:=)[a-fA-F0-9]+',
-              f'\\g<1>{hash_arm7}',
-              content,
-              flags=re.DOTALL
-          )
-
-          with open(makefile_path, 'w') as f:
-              f.write(content)
-          "
+          # Update version
+          sed -i "s/^PKG_VERSION:=.*/PKG_VERSION:=$NEW_VER/" "$MAKEFILE"
+          sed -i "s/^PKG_RELEASE:=.*/PKG_RELEASE:=1/" "$MAKEFILE"
           
-          echo "Makefile updated."
-          cat clouddrive2/Makefile
+          # Update hashes using awk for more precise matching
+          awk -v x86="$HASH_X86_64" -v arm64="$HASH_AARCH64" -v arm7="$HASH_ARMV7" '
+          BEGIN { in_x86=0; in_aarch64=0; in_arm=0; }
+          /ifeq \(\$\(ARCH\),x86_64\)/ { in_x86=1; in_aarch64=0; in_arm=0; print; next; }
+          /ifeq \(\$\(ARCH\),aarch64\)/ { in_x86=0; in_aarch64=1; in_arm=0; print; next; }
+          /ifeq \(\$\(ARCH\),arm\)/ { in_x86=0; in_aarch64=0; in_arm=1; print; next; }
+          /^endif/ { in_x86=0; in_aarch64=0; in_arm=0; print; next; }
+          /^  PKG_HASH:=/ {
+            if (in_x86) { print "  PKG_HASH:=" x86; next; }
+            if (in_aarch64) { print "  PKG_HASH:=" arm64; next; }
+            if (in_arm) { print "  PKG_HASH:=" arm7; next; }
+          }
+          { print }
+          ' "$MAKEFILE" > "$MAKEFILE.tmp" && mv "$MAKEFILE.tmp" "$MAKEFILE"
+          
+          echo ""
+          echo "=== Updated Makefile ==="
+          cat "$MAKEFILE"
 
       - name: Commit and Push
         if: steps.check.outputs.update_needed == 'true'
