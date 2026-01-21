@@ -55,19 +55,35 @@ jobs:
           get_hash() {
             local arch=$1
             local filename="clouddrive-2-linux-${arch}-${VER}.tgz"
-            echo "Downloading $filename..."
-            curl -sL -o "$filename" "$BASE_URL/$filename"
-            sha256sum "$filename" | awk '{print $1}'
+            echo "Downloading $filename..." >&2
+            
+            if ! curl -fsSL -o "$filename" "$BASE_URL/$filename"; then
+              echo "Error: Failed to download $filename" >&2
+              return 1
+            fi
+            
+            local hash=$(sha256sum "$filename" | awk '{print $1}')
             rm "$filename"
+            
+            # Validate hash format (64 hex characters)
+            if [[ ! "$hash" =~ ^[a-f0-9]{64}$ ]]; then
+              echo "Error: Invalid hash format for $filename: $hash" >&2
+              return 1
+            fi
+            
+            echo "$hash"
           }
           
           HASH_X86_64=$(get_hash "x86_64")
           HASH_AARCH64=$(get_hash "aarch64")
           HASH_ARMV7=$(get_hash "armv7")
           
-          echo "hash_x86_64=${HASH_X86_64}" >> $GITHUB_OUTPUT
-          echo "hash_aarch64=${HASH_AARCH64}" >> $GITHUB_OUTPUT
-          echo "hash_armv7=${HASH_ARMV7}" >> $GITHUB_OUTPUT
+          # Output with proper formatting
+          {
+            echo "hash_x86_64=$HASH_X86_64"
+            echo "hash_aarch64=$HASH_AARCH64"
+            echo "hash_armv7=$HASH_ARMV7"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Update Makefile
         if: steps.check.outputs.update_needed == 'true'
