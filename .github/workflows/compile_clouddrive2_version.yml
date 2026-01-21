@@ -35,18 +35,24 @@ jobs:
           CURRENT_VERSION=$(grep '^PKG_VERSION:=' clouddrive2/Makefile | cut -d= -f2)
           echo "Current Version: $CURRENT_VERSION"
           
+          # Always set the version for later steps
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          
           if [ "$NEW_VERSION" != "$CURRENT_VERSION" ]; then
-             echo "Update found!"
-             echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+             echo "Version update found: $CURRENT_VERSION -> $NEW_VERSION"
              echo "update_needed=true" >> $GITHUB_OUTPUT
+             echo "update_reason=version_change" >> $GITHUB_OUTPUT
           else
-             echo "No update needed."
-             echo "update_needed=false" >> $GITHUB_OUTPUT
+             echo "Version is current ($CURRENT_VERSION)"
+             # Even if version is same, we should verify hashes
+             # This will be checked in the next step
+             echo "update_needed=check_hash" >> $GITHUB_OUTPUT
+             echo "update_reason=verify_hash" >> $GITHUB_OUTPUT
           fi
 
       - name: Calculate Hashes
         id: hashes
-        if: steps.check.outputs.update_needed == 'true'
+        if: steps.check.outputs.update_needed == 'true' || steps.check.outputs.update_needed == 'check_hash'
         run: |
           VER="${{ steps.check.outputs.new_version }}"
           BASE_URL="https://github.com/cloud-fs/cloud-fs.github.io/releases/download/v$VER"
@@ -85,8 +91,59 @@ jobs:
             echo "hash_armv7=$HASH_ARMV7"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Verify Hashes
+        id: verify
+        if: steps.check.outputs.update_needed == 'check_hash'
+        env:
+          CALC_HASH_X86: ${{ steps.hashes.outputs.hash_x86_64 }}
+          CALC_HASH_ARM64: ${{ steps.hashes.outputs.hash_aarch64 }}
+          CALC_HASH_ARM7: ${{ steps.hashes.outputs.hash_armv7 }}
+        run: |
+          MAKEFILE="clouddrive2/Makefile"
+          
+          # Extract current hashes from Makefile
+          CURRENT_HASH_X86=$(awk '/ifeq \(\$\(ARCH\),x86_64\)/,/endif/ {if (/PKG_HASH:=/) {sub(/.*PKG_HASH:=/, ""); print; exit}}' "$MAKEFILE")
+          CURRENT_HASH_ARM64=$(awk '/ifeq \(\$\(ARCH\),aarch64\)/,/endif/ {if (/PKG_HASH:=/) {sub(/.*PKG_HASH:=/, ""); print; exit}}' "$MAKEFILE")
+          CURRENT_HASH_ARM7=$(awk '/ifeq \(\$\(ARCH\),arm\)/,/endif/ {if (/PKG_HASH:=/) {sub(/.*PKG_HASH:=/, ""); print; exit}}' "$MAKEFILE")
+          
+          echo "Current Makefile hashes:"
+          echo "  x86_64:  $CURRENT_HASH_X86"
+          echo "  aarch64: $CURRENT_HASH_ARM64"
+          echo "  armv7:   $CURRENT_HASH_ARM7"
+          echo ""
+          echo "Calculated hashes from upstream:"
+          echo "  x86_64:  $CALC_HASH_X86"
+          echo "  aarch64: $CALC_HASH_ARM64"
+          echo "  armv7:   $CALC_HASH_ARM7"
+          echo ""
+          
+          # Check if any hash differs
+          NEED_UPDATE="false"
+          if [ "$CURRENT_HASH_X86" != "$CALC_HASH_X86" ]; then
+            echo "❌ x86_64 hash mismatch!"
+            NEED_UPDATE="true"
+          fi
+          if [ "$CURRENT_HASH_ARM64" != "$CALC_HASH_ARM64" ]; then
+            echo "❌ aarch64 hash mismatch!"
+            NEED_UPDATE="true"
+          fi
+          if [ "$CURRENT_HASH_ARM7" != "$CALC_HASH_ARM7" ]; then
+            echo "❌ armv7 hash mismatch!"
+            NEED_UPDATE="true"
+          fi
+          
+          if [ "$NEED_UPDATE" = "true" ]; then
+            echo ""
+            echo "⚠️  Hash verification failed - update needed!"
+            echo "needs_update=true" >> $GITHUB_OUTPUT
+          else
+            echo ""
+            echo "✅ All hashes match - no update needed!"
+            echo "needs_update=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Update Makefile
-        if: steps.check.outputs.update_needed == 'true'
+        if: steps.check.outputs.update_needed == 'true' || steps.verify.outputs.needs_update == 'true'
         env:
           NEW_VER: ${{ steps.check.outputs.new_version }}
           HASH_X86_64: ${{ steps.hashes.outputs.hash_x86_64 }}
@@ -125,18 +182,28 @@ jobs:
           cat "$MAKEFILE"
 
       - name: Commit and Push
-        if: steps.check.outputs.update_needed == 'true'
+        if: steps.check.outputs.update_needed == 'true' || steps.verify.outputs.needs_update == 'true'
+        env:
+          UPDATE_REASON: ${{ steps.check.outputs.update_reason }}
+          NEW_VER: ${{ steps.check.outputs.new_version }}
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
           
           git add clouddrive2/Makefile
           
-          git commit -m "clouddrive2: update to ${{ steps.check.outputs.new_version }}"
+          # Create appropriate commit message
+          if [ "$UPDATE_REASON" = "version_change" ]; then
+            COMMIT_MSG="clouddrive2: update to $NEW_VER"
+          else
+            COMMIT_MSG="clouddrive2: fix PKG_HASH for $NEW_VER"
+          fi
+          
+          git commit -m "$COMMIT_MSG"
           git push origin HEAD:${{ github.ref }}
 
       - name: Trigger Build
-        if: steps.check.outputs.update_needed == 'true'
+        if: steps.check.outputs.update_needed == 'true' || steps.verify.outputs.needs_update == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh workflow run build.yml
