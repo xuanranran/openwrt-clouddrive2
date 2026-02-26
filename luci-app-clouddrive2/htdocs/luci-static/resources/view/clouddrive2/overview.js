@@ -16,7 +16,10 @@ function getServiceStatus() {
 	return L.resolveDefault(callServiceList('clouddrive2'), {}).then(function(res) {
 		let isRunning = false;
 		try {
-			isRunning = res['clouddrive2']['instances']['clouddrive2']['running'];
+			let instances = res['clouddrive2']['instances'] || {};
+			isRunning = Object.values(instances).some(function(inst) {
+				return inst.running === true;
+			});
 		} catch(e) {}
 		return isRunning;
 	});
