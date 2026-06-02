@@ -21,14 +21,26 @@ jobs:
       - name: Check for Updates
         id: check
         run: |
-          API_URL="https://api.github.com/repos/cloud-fs/cloud-fs.github.io/releases/latest"
-          LATEST_TAG=$(curl -s "$API_URL" | grep '"tag_name":' | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
+          # NOTE: Do NOT use /releases/latest. Upstream publishes separate macOS
+          # "App" releases (e.g. tag "app-v1.0.8-3") that only contain a .dmg and
+          # no Linux .tgz assets. Those can be the "latest" release and would lead
+          # to a 404 when fetching clouddrive-2-linux-*.tgz.
+          # Instead, list all releases and pick the highest CLI release whose tag
+          # matches "v<number>" (the releases that actually ship Linux binaries).
+          API_URL="https://api.github.com/repos/cloud-fs/cloud-fs.github.io/releases?per_page=100"
+          LATEST_TAG=$(curl -s "$API_URL" \
+            | grep '"tag_name":' \
+            | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/' \
+            | grep -E '^v[0-9]+(\.[0-9]+)*$' \
+            | sort -V \
+            | tail -n 1)
           
           if [ -z "$LATEST_TAG" ]; then
-            echo "Failed to find latest release tag."
+            echo "Failed to find latest CLI release tag."
             exit 1
           fi
           
+          echo "Latest CLI release tag: $LATEST_TAG"
           NEW_VERSION=$(echo "$LATEST_TAG" | sed 's/^v//')
           echo "Latest Version: $NEW_VERSION"
           
