@@ -52,4 +52,20 @@
   sh -c "$(curl -ksS https://ghproxy.net/https://raw.githubusercontent.com/xuanranran/openwrt-clouddrive2/master/install.sh)" _ gh_proxy="https://ghproxy.net/"
   ```
 
+## Configuration persistence
+
+CloudDrive2 stores its runtime configuration in `/etc/CloudDrive2`. Existing
+installations are migrated automatically from `/etc/Waytech/CloudDrive2` or
+`/Waytech/CloudDrive2` on the next service start. The package also adds this
+directory to OpenWrt's sysupgrade keep list so it is included when firmware
+settings are preserved.
+
+The HTTP/HTTPS ports and cloud mount points are managed in CloudDrive2's own
+web interface. This package runs the native CloudDrive2 binary rather than a
+Docker container. Mounting cloud drives under `/mnt` is recommended and works
+especially well with the Samba4 package. The LuCI page only enables or disables
+the service. Before startup, the init script reads the configured `http_port`
+from `/etc/CloudDrive2/config.toml` (defaulting to `19798`) and refuses to start
+if another process is already listening on that port.
+
 --------------

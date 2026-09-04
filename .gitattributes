@@ -1,0 +1,5 @@
+*.init text eol=lf
+*.rpc text eol=lf
+*.config text eol=lf
+*.upgrade text eol=lf
+Makefile text eol=lf
